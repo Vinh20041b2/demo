@@ -52,9 +52,8 @@
         </div>
         <div class="card-container">
             <div class="card">Độ ẩm đất: <span id="soil_moisture">--</span></div>
-            <label for="pumpSwitch">Cài đặt độ ẩm bơmbơm:</label>
+            <label for="pumpSwitch">Cài đặt độ ẩm bơm nước:</label>
             <input type="range" id="pumpSwitch" min="0" max="100" value="0" class="slider">
-            </div>
         </div>
         <button class="send-button" onclick="sendControlData()">Gửi Dữ Liệu</button>
     </div>
@@ -91,18 +90,17 @@
             client.subscribe(topics, (err) => {
                 if (!err) {
                     logDebug(`✅ Đã đăng ký các topic: ${topics.join(', ')}`);
-                    
-                    // Chỉ gửi dữ liệu sau khi kết nối và đăng ký topic thành công
                     const startMessage = { bat_dau: true };
                     logDebug(`📤 Gửi dữ liệu khởi động: ${JSON.stringify(startMessage)}`);
                     client.publish(publishTopic, JSON.stringify(startMessage));
                 }
             });
         });
-        
+
         client.on("message", (topic, message) => {
             let data = JSON.parse(message.toString());
             logDebug(`📩 Nhận dữ liệu từ ${topic}: ${JSON.stringify(data)}`);
+
             if (topic === "esp/dk") {
                 document.getElementById("lightSwitch").checked = data.den === 1;
                 document.getElementById("lightStatus").innerText = data.den === 1 ? "ON" : "OFF";
@@ -110,11 +108,16 @@
                 document.getElementById("fanValue").innerText = data.toc_do_quat;
                 document.getElementById("heaterSlider").value = data.may_suoi;
                 document.getElementById("heaterValue").innerText = data.may_suoi;
-                document.getElementById("pumpSwitch").value = data.may_bom ;
-                document.getElementById("pumpStatus").innerText = data.may_bom ;
+                document.getElementById("pumpSwitch").value = data.may_bom;
+            }
+
+            if (topic === "esp/gui") {
+                document.getElementById("temperature").innerText = data.sensor_nhietdo;
+                document.getElementById("humidity").innerText = data.sensor_doam;
+                document.getElementById("light").innerText = data.sensor_anhsang;
+                document.getElementById("soil_moisture").innerText = data.sensor_doamdat;
             }
         });
-        
     </script>
 </body>
 </html>
