@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tra cứu thông tin cảm biến</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            text-align: center;
+            padding: 20px;
+        }
+        .navbar {
+            background-color: #007bff;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            padding: 10px 0;
+        }
+        .navbar a {
+            color: white;
+            padding: 14px 20px;
+            text-decoration: none;
+            font-size: 18px;
+        }
+        .navbar a:hover {
+            background-color: #0056b3;
+            border-radius: 5px;
+        }
+        label, select, input, button {
+            margin: 10px;
+            padding: 8px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        table {
+            width: 80%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: center;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        canvas {
+            width: 70%;
+            max-width: 70%;
+            margin: 20px auto;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <a href="index.html">Trang chủ</a>
+        <a href="tracuu.html">Tra cứu</a>
+        <a href="#">Cài đặt</a>
+    </div>
+    
+    <h2>Tra cứu thông tin cảm biến</h2>
+    
+    <label for="sensorType">Loại cảm biến:</label>
+    <select id="sensorType">
+        <option value="">Tất cả</option>
+        <option value="nhiệt độ phòng">Nhiệt độ</option>
+        <option value="độ ẩm không khí">Độ ẩm không khí</option>
+        <option value="độ ẩm đất">Độ ẩm đất</option>
+        <option value="ánh sáng">Ánh sáng</option>
+    </select>
+
+    <label for="startDate">Từ:</label>
+    <input type="date" id="startDate">
+    <input type="time" id="startTime">
+
+    <label for="endDate">Đến:</label>
+    <input type="date" id="endDate">
+    <input type="time" id="endTime">
+
+    <button onclick="searchData()">Tra cứu</button>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Thời gian</th>
+                <th>Loại cảm biến</th>
+                <th>Giá trị</th>
+            </tr>
+        </thead>
+        <tbody id="sensorTable"></tbody>
+    </table>
+
+    <canvas id="sensorChart"></canvas>
+
+    <script>
+        const broker = "wss://e8fa3a03f84a4ba6ae0a38cb4c21a9e6.s1.eu.hivemq.cloud:8884/mqtt";
+        const searchTopic = "web/tracuu";
+        const resultTopic = "web/ketqua";
+        const clientId = "webClient_" + Math.random().toString(16).substr(2, 8);
+        const username = "vuvuvu";
+        const password = "1234567890Aa";
+
+        const client = mqtt.connect(broker, {
+            clientId: clientId,
+            username: username,
+            password: password,
+            reconnectPeriod: 1000,
+            connectTimeout: 30 * 1000,
+        });
+
+        let sensorData = [];
+        let chart;
+
+        client.on("connect", function () {
+            console.log("✅ Kết nối MQTT thành công");
+            client.subscribe(resultTopic, function (err) {
+                if (!err) console.log("📡 Đã đăng ký nhận dữ liệu từ:", resultTopic);
+            });
+        });
+
+        client.on("message", function (topic, message) {
+            if (topic === resultTopic) {
+                let data = JSON.parse(message.toString());
+                updateTable(data);
+                updateChart(data);
+            }
+        });
+
+        function searchData() {
+            let sensorType = document.getElementById("sensorType").value;
+            let startDate = document.getElementById("startDate").value;
+            let startTime = document.getElementById("startTime").value || "00:00";
+            let endDate = document.getElementById("endDate").value;
+            let endTime = document.getElementById("endTime").value || "23:59";
+
+            if (!startDate || !endDate) {
+                alert("⚠️ Vui lòng chọn ngày bắt đầu và ngày kết thúc!");
+                return;
+            }
+
+            let startDateTime = `${startTime} ${startDate.split("-").reverse().join("/")}`;
+            let endDateTime = `${endTime} ${endDate.split("-").reverse().join("/")}`;
+
+            let searchQuery = { type: sensorType || "all", startDateTime: startDateTime, endDateTime: endDateTime };
+            
+            console.log("📤 Gửi truy vấn MQTT:", searchQuery);
+            client.publish(searchTopic, JSON.stringify(searchQuery));
+        }
+
+        function updateTable(data) {
+            let table = document.getElementById("sensorTable");
+            let newRow = table.insertRow();
+            let cell1 = newRow.insertCell(0);
+            let cell2 = newRow.insertCell(1);
+            let cell3 = newRow.insertCell(2);
+
+            cell1.textContent = data.TIME;
+            cell2.textContent = data.NAME;
+            cell3.textContent = data.VALUE;
+        }
+
+        function updateChart(data) {
+            sensorData.push({ time: data.TIME, value: data.VALUE });
+
+            let ctx = document.getElementById("sensorChart").getContext("2d");
+            if (!chart) {
+                chart = new Chart(ctx, {
+                    type: "line",
+                    data: {
+                        labels: sensorData.map(d => d.time),
+                        datasets: [{
+                            label: "Giá trị cảm biến",
+                            data: sensorData.map(d => d.value),
+                            borderColor: "#007bff",
+                            fill: false
+                        }]
+                    }
+                });
+            } else {
+                chart.data.labels = sensorData.map(d => d.time);
+                chart.data.datasets[0].data = sensorData.map(d => d.value);
+                chart.update();
+            }
+        }
+    </script>
+</body>
+</html>
